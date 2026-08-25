@@ -1,0 +1,31 @@
+{
+  "manifest_version": 1,
+  "dataset_slug": "puneet6060/intel-image-classification",
+  "seed": 42,
+  "train": {
+    "root": "data\\seg_train\\seg_train",
+    "total_images": 14034,
+    "class_counts": {
+      "buildings": 2191,
+      "forest": 2271,
+      "glacier": 2404,
+      "mountain": 2512,
+      "sea": 2274,
+      "street": 2382
+    }
+  },
+  "test": {
+    "root": "data\\seg_test\\seg_test",
+    "total_images": 3000,
+    "class_counts": {
+      "buildings": 437,
+      "forest": 474,
+      "glacier": 553,
+      "mountain": 525,
+      "sea": 510,
+      "street": 501
+    }
+  },
+  "archive_path": null,
+  "archive_sha256": null
+}

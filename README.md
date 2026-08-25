@@ -1,53 +1,223 @@
 # NaturalSceneClassification
-Solving the classification issue found here: https://www.kaggle.com/datasets/puneet6060/intel-image-classification
-## Introduction:
-This repo contains the code required to train a ResNet50 pretrained model to identify different image types based on the Kaggle dataset above.
-The model was trained to 92.20% accuracy. The model file I trained is also included.
 
-The model has 6 classes:
-- Buildings
-- Forest
-- Mountains
-- Glaciers
-- Sea
-- Streets
+Reproducible training, evaluation, and inference tooling for the Kaggle Intel Image Classification benchmark: [puneet6060/intel-image-classification](https://www.kaggle.com/datasets/puneet6060/intel-image-classification).
 
-## Method
-I trained the model in only 3 epochs as the ResNet50 pretrained model already generalized well to the data set.
+This project modernizes the original ResNet50 experiment into a package with:
 
-I added in a scheduler to adjust the learning rate as training progressed which helped the model generalize better. Early stopping is also in the scripts
-but was not needed due to the small epoch number required to reach a good end result.
+- explicit CPU and CUDA install paths
+- deterministic train/validation splitting from `seg_train`
+- held-out test evaluation on `seg_test`
+- metadata-rich checkpoints with SHA-256 hashes
+- offline unit and smoke tests
+- a documented `nsc` CLI for download, inspection, training, evaluation, and prediction
 
-I also performed some visualizations of the data to see what I was working with before training and to test my ideas for data augmentation.
+## Classes
 
-### Here are 5 samples of the training data with no data augmentation:
-![alt text](/images/Figure_transform.png "Traning Data No Transforms")
+The classifier predicts six scene labels:
 
-### Here are 5 samples of the validation data with no data augmentation:
-![alt text](/images/Figure_validation.png "Validation Data No Transforms")
+- `buildings`
+- `forest`
+- `glacier`
+- `mountain`
+- `sea`
+- `street`
 
-## Results
-### Here is the training over 3 epochs:
-![alt text](/images/Figure_1.png "Training Results")
+## Quick start
 
-### Here is the confusion matrix of the trained model:
-![alt text](/images/Figure_confusion_matrix.png "Confusion Matrix")
+### 1. Clone the repository
 
-### Predicted Outputs
-![alt text](/images/Figure_pred_1.png "Predicted Image One")
+```bash
+git clone https://github.com/Aeryes/NaturalSceneClassification.git
+cd NaturalSceneClassification
+```
 
-![alt text](/images/Figure_pred_2.png "Predicted Image Two")
+### 2. Install PyTorch
 
-![alt text](/images/Figure_pred_3.png "Predicted Image Three")
+CPU:
 
-## How to use?
-Use the following:
+```bash
+python -m pip install -r requirements/torch-cpu.txt
+```
 
-```git clone https://github.com/Aeryes/NaturalSceneClassification.git```
+CUDA 11.8:
 
-Run ```pip install -r requirements.txt```
+```bash
+python -m pip install -r requirements/torch-cu118.txt
+```
 
-Place your new images in the data/seg_pred/seg_pred folder
+### 3. Install the project
 
-Run ```python predict.py```
+```bash
+python -m pip install -e ".[dev]"
+```
 
+The project intentionally keeps `torch` and `torchvision` out of `pyproject.toml` because the correct wheel depends on your local CPU/GPU and Python version. Install them first from the matching requirements file, then install the package itself.
+
+### 4. Download or validate the dataset
+
+If Kaggle credentials are already configured:
+
+```bash
+nsc data download --data-root data --seed 42
+```
+
+If the dataset is already extracted locally:
+
+```bash
+nsc data inspect --data-root data --seed 42
+```
+
+This generates:
+
+- `data/manifests/train_validation_split.csv`
+- `configs/intel-scenes.dataset.json`
+
+The modernized training flow creates a deterministic train/validation split from `data/seg_train/seg_train` and reserves `data/seg_test/seg_test` for held-out evaluation only.
+
+## Train
+
+The default baseline preserves the original transfer-learning head and three-epoch schedule:
+
+```bash
+nsc train --config configs/train.toml
+```
+
+Useful overrides:
+
+```bash
+nsc train --config configs/train.toml --device cuda --seed 42
+nsc train --config configs/train.toml --device cpu --dry-run --no-pretrained-weights
+```
+
+Artifacts are written to `artifacts/runs/<run-id>/`, including:
+
+- best and last checkpoints
+- training curves
+- training history
+- checkpoint metadata with SHA-256
+- resolved run metadata
+
+## Evaluate
+
+Evaluate the best checkpoint against the untouched Kaggle test split:
+
+```bash
+nsc evaluate \
+  --checkpoint artifacts/runs/<run-id>/checkpoints/best.pt \
+  --test-root data/seg_test/seg_test \
+  --output-dir artifacts/runs/<run-id>/metrics
+```
+
+This writes:
+
+- `test_metrics.json`
+- `confusion_matrix.png`
+- `checkpoint_metadata.json`
+
+## Predict
+
+Predict a single image:
+
+```bash
+nsc predict --checkpoint artifacts/runs/<run-id>/checkpoints/best.pt --image path/to/image.jpg
+```
+
+Predict every image in the default inference folder and export JSON:
+
+```bash
+nsc predict \
+  --checkpoint artifacts/runs/<run-id>/checkpoints/best.pt \
+  --folder data/seg_pred/seg_pred \
+  --json-output artifacts/runs/<run-id>/predictions.json
+```
+
+Legacy compatibility scripts remain available:
+
+```bash
+python train.py
+python predict.py
+python visualize.py
+```
+
+## Repository layout
+
+```text
+src/natural_scene_classification/
+  cli.py
+  data.py
+  training.py
+  evaluation.py
+  inference.py
+  checkpoints.py
+configs/
+  train.toml
+  intel-scenes.dataset.json
+tests/
+.github/workflows/ci.yml
+```
+
+## Historical experiment artifacts
+
+The original repository included visual artifacts from the earlier experiment:
+
+### Training samples without augmentation
+![Training Data No Transforms](/images/Figure_transform.png)
+
+### Validation samples without augmentation
+![Validation Data No Transforms](/images/Figure_validation.png)
+
+### Historical training curves
+![Training Results](/images/Figure_1.png)
+
+### Historical confusion matrix
+![Confusion Matrix](/images/Figure_confusion_matrix.png)
+
+### Historical prediction examples
+![Predicted Image One](/images/Figure_pred_1.png)
+![Predicted Image Two](/images/Figure_pred_2.png)
+![Predicted Image Three](/images/Figure_pred_3.png)
+
+## Results and comparison
+
+The original README reported `92.20%` accuracy. Treat that number as a historical experiment result, not a verified benchmark for the modernized workflow. Verified metrics from new runs should come only from artifacts generated by:
+
+```bash
+nsc train ...
+nsc evaluate ...
+```
+
+and recorded under `artifacts/runs/<run-id>/metrics/`.
+
+Verified baseline run (`artifacts/runs/20260825-200645/`):
+
+- device used: CPU
+- held-out `seg_test` accuracy: `92.37%`
+- macro precision / recall / F1: `92.50%` / `92.59%` / `92.50%`
+- weighted precision / recall / F1: `92.39%` / `92.37%` / `92.33%`
+- best checkpoint SHA-256: `cc1584d47d20916014cde6cf8b2efa81e7102b8cbde11a0a00ec75dbfda3d698`
+
+This measured run slightly exceeds the historical `92.20%` claim, but the numbers should still be treated as non-equivalent experiments if the split protocol, preprocessing, or checkpoint-selection process differs.
+
+## Limitations
+
+- The Kaggle dataset terms apply to the raw dataset and any redistributed derived artifacts.
+- Historical and modernized metrics are not directly comparable if the split or preprocessing changes.
+- Confidence scores are not calibrated probabilities for arbitrary downstream use.
+- The committed legacy `resnet_model.pth` should be treated as a historical artifact until a release-hosted checkpoint with metadata is published.
+
+## Development checks
+
+```bash
+python -m ruff format --check .
+python -m ruff check .
+python -m mypy src
+python -m pytest --cov=natural_scene_classification
+python -m build
+python -m twine check dist/*
+```
+
+## Documentation
+
+- [MODEL_CARD.md](MODEL_CARD.md)
+- [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
+- [LICENSE](LICENSE)
